@@ -1,5 +1,8 @@
 name: Backend DevSecOps Pipeline
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
@@ -31,7 +34,9 @@ jobs:
         run: |
           source /home/ec2-user/devsecops-tools/venv/bin/activate
           cd backend
-          bandit -r . -x ./venv,__pycache__,tests -f txt
+          bandit -r . \
+            -x ./venv,__pycache__,tests \
+            -f txt
 
   pip-audit:
     runs-on: self-hosted
@@ -92,8 +97,10 @@ jobs:
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region $AWS_REGION | \
-          docker login --username AWS --password-stdin \
-          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          docker login \
+            --username AWS \
+            --password-stdin \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
       - name: Build Docker Image
         run: |
