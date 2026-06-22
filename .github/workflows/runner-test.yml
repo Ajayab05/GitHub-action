@@ -29,8 +29,9 @@ jobs:
 
       - name: Run Bandit
         run: |
+          source /home/ec2-user/devsecops-tools/venv/bin/activate
           cd backend
-          bandit -r . -f txt
+          bandit -r . -x ./venv,__pycache__,tests -f txt
 
   pip-audit:
     runs-on: self-hosted
