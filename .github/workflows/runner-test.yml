@@ -1,120 +1,36 @@
-name: Backend DevSecOps Pipeline
+name: Runner Test
 
 on:
-push:
-branches:
-- main
-paths:
-- 'backend/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
 
-workflow_dispatch:
+  workflow_dispatch:
 
 env:
-AWS_REGION: us-east-1
-ECR_REPOSITORY: crud-backend
-ACCOUNT_ID: "076124125794"
-
-defaults:
-run:
-shell: bash
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: crud-backend
+  ACCOUNT_ID: "076124125794"
 
 jobs:
+  test-runner:
+    runs-on: self-hosted
 
-bandit:
-runs-on: self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
+      - name: Verify Runner
+        run: |
+          echo "Runner is working"
+          hostname
+          whoami
+          pwd
 
-  - name: Run Bandit
-    run: |
-      cd backend
-      bandit -r . -f txt
+      - name: Check Docker
+        run: docker --version
 
-
-pip-audit:
-runs-on: self-hosted
-
-
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
-
-  - name: Run pip-audit
-    run: |
-      source /home/ec2-user/devsecops-tools/venv/bin/activate
-      cd backend
-      pip-audit -r requirements.txt
-
-
-checkov:
-runs-on: self-hosted
-
-
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
-
-  - name: Run Checkov
-    run: |
-      source /home/ec2-user/devsecops-tools/venv/bin/activate
-      checkov -d .
-
-
-tests:
-runs-on: self-hosted
-
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
-
-  - name: Install Dependencies
-    run: |
-      cd backend
-      pip3 install -r requirements.txt
-      pip3 install pytest
-
-  - name: Run Tests
-    run: |
-      cd backend
-      pytest || true
-
-docker-build-push:
-needs:
-- bandit
-- pip-audit
-- checkov
-- tests
-
-runs-on: self-hosted
-
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
-
-  - name: Login to Amazon ECR
-    run: |
-      aws ecr get-login-password \
-        --region $AWS_REGION | docker login \
-        --username AWS \
-        --password-stdin \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-
-  - name: Build Docker Image
-    run: |
-      docker build \
-        -t $ECR_REPOSITORY:${{ github.sha }} \
-        ./backend
-
-  - name: Tag Docker Image
-    run: |
-      docker tag \
-        $ECR_REPOSITORY:${{ github.sha }} \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
-
-  - name: Push Docker Image
-    run: |
-      docker push \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
-
+      - name: Check AWS CLI
+        run: aws --version
