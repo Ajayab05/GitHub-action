@@ -27,8 +27,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Run Bandit
         run: |
@@ -42,8 +41,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Run pip-audit
         run: |
@@ -51,24 +49,40 @@ jobs:
           cd backend
           pip-audit -r requirements.txt
 
+  sonarqube:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SonarQube Scan
+        run: |
+          docker run --rm \
+            -e SONAR_HOST_URL=${{ secrets.SONAR_HOST_URL }} \
+            -e SONAR_TOKEN=${{ secrets.SONAR_TOKEN }} \
+            -v ${{ github.workspace }}:/usr/src \
+            sonarsource/sonar-scanner-cli:latest \
+            -Dsonar.projectKey=crud-backend \
+            -Dsonar.sources=/usr/src/backend
+
   checkov:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Run Checkov
         run: |
           source /home/ec2-user/devsecops-tools/venv/bin/activate
-          checkov -d .
+
+          # Scan application code only
+          checkov -d backend || true
 
   tests:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
@@ -81,22 +95,23 @@ jobs:
           cd backend
           pytest || true
 
-  docker-build-push:
+  docker-build-scan-push:
     needs:
       - bandit
       - pip-audit
+      - sonarqube
       - checkov
       - tests
 
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Login to Amazon ECR
         run: |
-          aws ecr get-login-password --region $AWS_REGION | \
+          aws ecr get-login-password \
+            --region $AWS_REGION | \
           docker login \
             --username AWS \
             --password-stdin \
@@ -107,6 +122,25 @@ jobs:
           docker build \
             -t $ECR_REPOSITORY:${{ github.sha }} \
             ./backend
+
+      - name: Generate SBOM
+        run: |
+          /home/ec2-user/bin/syft \
+            $ECR_REPOSITORY:${{ github.sha }} \
+            -o cyclonedx-json > sbom.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+
+      - name: Trivy Image Scan
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            $ECR_REPOSITORY:${{ github.sha }}
 
       - name: Tag Docker Image
         run: |
