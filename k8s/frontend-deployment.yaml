@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: pharma
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: 076124125794.dkr.ecr.us-east-1.amazonaws.com/crud-frontend:v4
+
+        ports:
+        - containerPort: 80
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80

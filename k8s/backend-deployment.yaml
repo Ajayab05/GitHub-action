@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: pharma
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: 076124125794.dkr.ecr.us-east-1.amazonaws.com/crud-backend:v5
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 5000
+
+        envFrom:
+        - secretRef:
+            name: postgres-secret
+
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+        readinessProbe:
+          httpGet:
+            path: /api
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        livenessProbe:
+          httpGet:
+            path: /api
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 15
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
