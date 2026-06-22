@@ -1,109 +1,112 @@
-name: Backend DevSecOps Pipeline
+  name: Backend DevSecOps Pipeline
 
-on:
-push:
-branches:
-- main
-
-paths:
+  on:
+  push:
+  branches:
+  - main
+  paths:
   - 'backend/**'
 
-workflow_dispatch:
+  workflow_dispatch:
 
-env:
-AWS_REGION: us-east-1
-ECR_REPOSITORY: crud-backend
-ACCOUNT_ID: 076124125794
+  env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: crud-backend
+  ACCOUNT_ID: "076124125794"
 
-jobs:
+  jobs:
 
-bandit:
-runs-on: self-hosted
+  bandit:
+  runs-on: self-hosted
 
-steps:
-  - uses: actions/checkout@v4
+  steps:
+    - uses: actions/checkout@v4
 
-  - name: Run Bandit
-    run: |
-      source ~/devsecops-tools/venv/bin/activate
-      cd backend
-      bandit -r .
+    - name: Run Bandit
+      run: |
+        source ~/devsecops-tools/venv/bin/activate
+        cd backend
+        bandit -r .
 
-pip-audit:
-runs-on: self-hosted
-
-steps:
-  - uses: actions/checkout@v4
-
-  - name: Run pip-audit
-    run: |
-      source ~/devsecops-tools/venv/bin/activate
-      cd backend
-      pip-audit -r requirements.txt
-
-checkov:
-runs-on: self-hosted
+  pip-audit:
+  runs-on: self-hosted
 
 
-steps:
-  - uses: actions/checkout@v4
+  steps:
+    - uses: actions/checkout@v4
 
-  - name: Run Checkov
-    run: |
-      source ~/devsecops-tools/venv/bin/activate
-      checkov -d k8s
+    - name: Run pip-audit
+      run: |
+        source ~/devsecops-tools/venv/bin/activate
+        cd backend
+        pip-audit -r requirements.txt
 
-tests:
-runs-on: self-hosted
 
-steps:
-  - uses: actions/checkout@v4
+  checkov:
+  runs-on: self-hosted
 
-  - name: Install Test Dependencies
-    run: |
-      cd backend
-      pip3 install -r requirements.txt
 
-  - name: Run Tests
-    run: |
-      cd backend
-      pytest || true
+  steps:
+    - uses: actions/checkout@v4
 
-docker-build-push:
+    - name: Run Checkov
+      run: |
+        source ~/devsecops-tools/venv/bin/activate
+        checkov -d k8s
 
-needs:
+
+  tests:
+  runs-on: self-hosted
+
+
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        cd backend
+        pip3 install -r requirements.txt
+        pip3 install pytest
+
+    - name: Run Tests
+      run: |
+        cd backend
+        pytest || true
+
+
+  docker-build-push:
+  needs:
   - bandit
   - pip-audit
   - checkov
   - tests
 
-runs-on: self-hosted
+  runs-on: self-hosted
 
-steps:
+  steps:
+    - uses: actions/checkout@v4
 
-  - uses: actions/checkout@v4
+    - name: Login ECR
+      run: |
+        aws ecr get-login-password \
+        --region $AWS_REGION | docker login \
+        --username AWS \
+        --password-stdin \
+        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-  - name: Login ECR
-    run: |
-      aws ecr get-login-password \
-      --region $AWS_REGION | docker login \
-      --username AWS \
-      --password-stdin \
-      $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+    - name: Build Image
+      run: |
+        docker build \
+          -t $ECR_REPOSITORY:${{ github.sha }} \
+          ./backend
 
-  - name: Build Image
-    run: |
-      docker build \
-      -t $ECR_REPOSITORY:${{ github.sha }} \
-      ./backend
+    - name: Tag Image
+      run: |
+        docker tag \
+          $ECR_REPOSITORY:${{ github.sha }} \
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
 
-  - name: Tag Image
-    run: |
-      docker tag \
-      $ECR_REPOSITORY:${{ github.sha }} \
-      $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
-
-  - name: Push Image
-    run: |
-      docker push \
-      $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
+    - name: Push Image
+      run: |
+        docker push \
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
