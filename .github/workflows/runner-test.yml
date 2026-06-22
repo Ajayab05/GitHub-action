@@ -1,106 +1,120 @@
 name: Backend DevSecOps Pipeline
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
+push:
+branches:
+- main
+paths:
+- 'backend/**'
 
-  workflow_dispatch:
+workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: crud-backend
-  ACCOUNT_ID: "076124125794"
+AWS_REGION: us-east-1
+ECR_REPOSITORY: crud-backend
+ACCOUNT_ID: "076124125794"
+
+defaults:
+run:
+shell: bash
 
 jobs:
 
-  bandit:
-    runs-on: self-hosted
+bandit:
+runs-on: self-hosted
 
-    steps:
-      - uses: actions/checkout@v4
+steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
 
-      - name: Run Bandit
-        run: |
-          source ~/devsecops-tools/venv/bin/activate
-          cd backend
-          bandit -r .
+  - name: Run Bandit
+    run: |
+      cd backend
+      bandit -r . -f txt
 
-  pip-audit:
-    runs-on: self-hosted
 
-    steps:
-      - uses: actions/checkout@v4
+pip-audit:
+runs-on: self-hosted
 
-      - name: Run pip-audit
-        run: |
-          source ~/devsecops-tools/venv/bin/activate
-          cd backend
-          pip-audit -r requirements.txt
 
-  checkov:
-    runs-on: self-hosted
+steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
 
-    steps:
-      - uses: actions/checkout@v4
+  - name: Run pip-audit
+    run: |
+      source /home/ec2-user/devsecops-tools/venv/bin/activate
+      cd backend
+      pip-audit -r requirements.txt
 
-      - name: Run Checkov
-        run: |
-          source ~/devsecops-tools/venv/bin/activate
-          checkov -d k8s
 
-  tests:
-    runs-on: self-hosted
+checkov:
+runs-on: self-hosted
 
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          cd backend
-          pip3 install -r requirements.txt
-          pip3 install pytest
+steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
 
-      - name: Run Tests
-        run: |
-          cd backend
-          pytest || true
+  - name: Run Checkov
+    run: |
+      source /home/ec2-user/devsecops-tools/venv/bin/activate
+      checkov -d .
 
-  docker-build-push:
-    needs:
-      - bandit
-      - pip-audit
-      - checkov
-      - tests
 
-    runs-on: self-hosted
+tests:
+runs-on: self-hosted
 
-    steps:
-      - uses: actions/checkout@v4
+steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
 
-      - name: Login ECR
-        run: |
-          aws ecr get-login-password \
-          --region $AWS_REGION | docker login \
-          --username AWS \
-          --password-stdin \
-          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+  - name: Install Dependencies
+    run: |
+      cd backend
+      pip3 install -r requirements.txt
+      pip3 install pytest
 
-      - name: Build Image
-        run: |
-          docker build \
-            -t $ECR_REPOSITORY:${{ github.sha }} \
-            ./backend
+  - name: Run Tests
+    run: |
+      cd backend
+      pytest || true
 
-      - name: Tag Image
-        run: |
-          docker tag \
-            $ECR_REPOSITORY:${{ github.sha }} \
-            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
+docker-build-push:
+needs:
+- bandit
+- pip-audit
+- checkov
+- tests
 
-      - name: Push Image
-        run: |
-          docker push \
-            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
+runs-on: self-hosted
+
+steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
+
+  - name: Login to Amazon ECR
+    run: |
+      aws ecr get-login-password \
+        --region $AWS_REGION | docker login \
+        --username AWS \
+        --password-stdin \
+        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+  - name: Build Docker Image
+    run: |
+      docker build \
+        -t $ECR_REPOSITORY:${{ github.sha }} \
+        ./backend
+
+  - name: Tag Docker Image
+    run: |
+      docker tag \
+        $ECR_REPOSITORY:${{ github.sha }} \
+        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
+
+  - name: Push Docker Image
+    run: |
+      docker push \
+        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}
+
