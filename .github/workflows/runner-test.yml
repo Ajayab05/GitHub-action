@@ -54,6 +54,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: SonarQube Scan
         run: |
@@ -74,8 +76,6 @@ jobs:
       - name: Run Checkov
         run: |
           source /home/ec2-user/devsecops-tools/venv/bin/activate
-
-          # Scan application code only
           checkov -d backend || true
 
   tests:
@@ -108,14 +108,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Login to Amazon ECR
+      - name: Verify AWS Identity
         run: |
-          aws ecr get-login-password \
-            --region $AWS_REGION | \
-          docker login \
-            --username AWS \
-            --password-stdin \
-            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+          aws sts get-caller-identity
 
       - name: Build Docker Image
         run: |
@@ -141,6 +136,15 @@ jobs:
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             $ECR_REPOSITORY:${{ github.sha }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password \
+            --region $AWS_REGION | \
+          docker login \
+            --username AWS \
+            --password-stdin \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
       - name: Tag Docker Image
         run: |
